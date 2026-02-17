@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Chatbot Business</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #e5ddd5;
+  display: flex;
+  justify-content: center;
+  padding: 30px;
+}
+
+.container {
+  width: 380px;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.header {
+  background: #075E54;
+  color: white;
+  padding: 15px;
+  font-weight: bold;
+  text-align: center;
+}
+
+#configForm {
+  padding: 15px;
+}
+
+#configForm input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+#configForm button {
+  width: 100%;
+  padding: 8px;
+  background: #25D366;
+  border: none;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.chat {
+  display: none;
+  height: 450px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-box {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  background: #ece5dd;
+}
+
+.message {
+  max-width: 75%;
+  padding: 8px 12px;
+  margin: 6px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.user {
+  background: #dcf8c6;
+  align-self: flex-end;
+}
+
+.bot {
+  background: white;
+  align-self: flex-start;
+}
+
+.input-area {
+  display: flex;
+  padding: 8px;
+  background: #f0f0f0;
+}
+
+.input-area input {
+  flex: 1;
+  padding: 8px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+
+.input-area button {
+  margin-left: 5px;
+  padding: 8px 15px;
+  background: #25D366;
+  border: none;
+  color: white;
+  border-radius: 20px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">Assistant Boutique</div>
+
+  <div id="configForm">
+    <input id="shopName" placeholder="Nom boutique" />
+    <input id="country" placeholder="Pays" />
+    <input id="productType" placeholder="Produits" />
+    <input id="deliveryInfo" placeholder="Livraison" />
+    <input id="paymentMethods" placeholder="Paiement" />
+    <input id="whatsappNumber" placeholder="WhatsApp (ex: 228XXXXXXXX)" />
+    <input id="tone" placeholder="Ton (commercial, rassurant...)" />
+    <button onclick="register()">Configurer</button>
+  </div>
+
+  <div class="chat" id="chatContainer">
+    <div class="chat-box" id="chatBox"></div>
+    <div class="input-area">
+      <input id="messageInput" placeholder="Message client..." />
+      <button onclick="sendMessage()">Envoyer</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let clientId = localStorage.getItem("clientId");
+let clientKey = localStorage.getItem("clientKey");
+
+const configForm = document.getElementById("configForm");
+const chatContainer = document.getElementById("chatContainer");
+const chatBox = document.getElementById("chatBox");
+
+if (clientId && clientKey) {
+  configForm.style.display = "none";
+  chatContainer.style.display = "flex";
+}
+
+async function register() {
+  const data = {
+    shopName: shopName.value,
+    country: country.value,
+    productType: productType.value,
+    deliveryInfo: deliveryInfo.value,
+    paymentMethods: paymentMethods.value,
+    whatsappNumber: whatsappNumber.value,
+    tone: tone.value
+  };
+
+  const response = await fetch("/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+  const result = await response.json();
+
+  clientId = result.clientId;
+  clientKey = result.clientKey;
+
+  localStorage.setItem("clientId", clientId);
+  localStorage.setItem("clientKey", clientKey);
+
+  configForm.style.display = "none";
+  chatContainer.style.display = "flex";
+}
+
+function addMessage(text, sender) {
+  const div = document.createElement("div");
+  div.classList.add("message", sender);
+  div.textContent = text;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+async function sendMessage() {
+  const message = messageInput.value.trim();
+  if (!message) return;
+
+  addMessage(message, "user");
+  messageInput.value = "";
+
+  const response = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clientId,
+      clientKey,
+      message
+    })
+  });
+
+  const data = await response.json();
+
+  if (data.error) {
+    addMessage(data.error, "bot");
+  } else {
+    addMessage(data.reply, "bot");
+  }
+}
+</script>
+
+</body>
+</html>
