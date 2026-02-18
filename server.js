@@ -11,10 +11,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+import OpenAI from "openai";
 
+const openai = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1"
+});
 
 const clients = {};
 const FREE_LIMIT = 20;
@@ -139,9 +141,95 @@ Tu dois répondre en JSON strict avec ce format :
   }
 });
 
+
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`SaaS lancé sur port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const db = await mysql.createPool({
+  host: process.env.MYSQL_DATABASE,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  ssl: { rejectUnauthorized: true }
+});
+
+app.post('/register', async (req, res) => {
+  const { name, email, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const [result] = await db.query(
+    'INSERT INTO clients (name, email, password) VALUES (?, ?, ?)',
+    [name, email, hashedPassword]
+  );
+  res.json({ clientId: result.insertId, message: 'Client enregistré ✅' });
+});
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  const [rows] = await db.query('SELECT * FROM clients WHERE email = ?', [email]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Client inconnu' });
+
+  const client = rows[0];
+  const valid = await bcrypt.compare(password, client.password);
+  if (!valid) return res.status(401).json({ error: 'Mot de passe incorrect' });
+
+  const token = jwt.sign({ clientId: client.id, email: client.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token });
+});
+// Test serveur
+app.get('/', (req, res) => res.send('SaaS API running ✅'));
+
+app.listen(process.env.PORT, () => console.log(`Server running on port ${process.env.PORT}`));
+function auth(req, res, next) {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Token manquant' });
+  try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
+  catch { res.status(403).json({ error: 'Token invalide' }); }
+}
+function auth(req, res, next) {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Token manquant' });
+  try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
+  catch { res.status(403).json({ error: 'Token invalide' }); }
+}
+app.post('/messages', auth, async (req, res) => {
+  const { message } = req.body;
+  const [result] = await db.query(
+    'INSERT INTO messages (client_id, message) VALUES (?, ?)',
+    [req.user.clientId, message]
+  );
+  res.json({ messageId: result.insertId });
+});
+
+app.get('/messages', auth, async (req, res) => {
+  const [messages] = await db.query(
+    'SELECT * FROM messages WHERE client_id = ? ORDER BY created_at DESC',
+    [req.user.clientId]
+  );
+  res.json(messages);
+});
+app.post('/pay-axazara', auth, async (req, res) => {
+  const { amount, currency } = req.body; // ex : XOF, NGN, GHS
+  try {
+    const response = await axios.post(
+      'https://api.axazara.com/v1/payments', // Exemple URL API test
+      {
+        tx_ref: `tx-${Date.now()}`,
+        amount,
+        currency,
+        customer: { email: req.user.email, name: req.user.name },
+        redirect_url: 'https://chatbot-saas-lcsl.onrender.com//payment-success'
+      },
+      { headers: { Authorization: `Bearer ${process.env.AXAZARA_KEY}` } }
+    );
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
