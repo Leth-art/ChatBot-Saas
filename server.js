@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-import OpenAI from "openai";
+
 
 const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
